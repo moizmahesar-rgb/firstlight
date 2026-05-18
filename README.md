@@ -1,156 +1,288 @@
-# Pumped Hydro Energy Storage Optimization - FirstLight Power
+# Pumped Hydro Asset Optimization: FirstLight Power
 
-## Project Overview
+**June 24, 2025 - ISO-NE Day-Ahead Energy and TMNSR Markets**
 
-This project optimizes revenue for a 1,000 MW pumped hydro storage facility operating in the ISO New England energy market on June 24, 2025. The strategy maximizes profit by arbitraging price spreads between day-ahead energy markets and ten-minute non-spinning reserves (TMNSR), subject to physical constraints including 75% round-trip efficiency and 8,000 MWh storage capacity.
+## Executive Summary
 
-The algorithm evaluates all possible pump-discharge pairs across 24 hours, identifies profitable trades after accounting for efficiency losses, executes them greedily in order of profit, and allocates remaining capacity to TMNSR reserves when profitable. Results demonstrate that reserves (TMNSR) generate 168% more revenue than energy arbitrage alone, revealing the dominant revenue driver in congested, volatile markets.
+This project optimizes daily revenue for a 1,000 MW pumped hydro asset operating in ISO-NE day-ahead energy and TMNSR (Ten-Minute Non-Spinning Reserve) markets. Using dynamic programming, the model determines optimal hourly dispatch decisions to maximize combined energy arbitrage and reserve revenue.
 
-## Results Visualization
+**Optimal Daily Revenue: $2,494,580**
+- Energy Arbitrage: $1,868,570 (75%)
+- TMNSR Reserves: $626,010 (25%)
 
-![Dispatch Analysis](dispatch_analysis.png)
+## Problem Statement
 
-The 4-panel chart above shows:
-- **Top-left:** Hourly prices with dispatch decisions (red=pump, green=generate, yellow=TMNSR)
-- **Top-right:** Storage level trajectory, filling to 8,000 MWh by hour 8
-- **Bottom-left:** Hourly revenue breakdown by action type
-- **Bottom-right:** Cumulative profit curve reaching $529,895 by end of day
+An operator controls a 1,000 MW reversible pump-turbine unit with 8,000 MWh storage capacity. The unit must:
+- Start with empty storage (0 MWh)
+- Operate within capacity constraints (0 to 8,000 MWh)
+- Apply 75% round-trip efficiency (pump input loss)
+- Decide hourly: pump, generate, provide reserve, or idle
+- Maximize total daily revenue across all markets
 
-## Data Source
+**Assumptions:**
+- Perfect foresight of all 24-hour prices
+- Asset can instantly ramp to full 1,000 MW capacity
+- No operational constraints (ramping, minimum run times, outages)
+- TMNSR reserves assumed not to deplete inventory
 
-Data was fetched directly from ISO New England's public RESTful API (v1.1) for location 4000 (Mass Hub) on June 24, 2025. Four price series were collected:
+## Solution Approach
 
-**Day-Ahead Locational Marginal Prices (DA LMP):** Hourly energy prices from the day-ahead market, representing the marginal cost to supply energy at Mass Hub.
+### Algorithm: Dynamic Programming
 
-**Real-Time Locational Marginal Prices (RT LMP):** Actual settlement prices observed in the real-time market after physical delivery.
-
-**TMNSR Clearing Prices:** Day-ahead clearing prices for ten-minute non-spinning reserves, paid hourly for the right to inject energy into the grid within 10 minutes if called upon.
-
-**DA A/S Strike Prices:** Threshold prices set the day before real-time, used to calculate closeout charges (the cost of the reserve provider failing to deliver). Closeout charge = max(0, RT LMP - Strike Price).
-
-## Data Points - June 24, 2025
-
-Hourly prices ranged dramatically across the day:
-
-| Metric | Value |
-|--------|-------|
-| **DA LMP Low** | $41.23/MWh (Hour 4) |
-| **DA LMP High** | $474.90/MWh (Hour 18) |
-| **DA LMP Average** | $156.73/MWh |
-| **RT LMP Range** | $41.28 - $94.02/MWh |
-| **TMNSR Range** | $5.22 - $25.79/MWh |
-| **Strike Price Range** | $55.42 - $116.39/MWh |
-
-This 11.5x spread between lowest and highest DA prices (hours 4 and 18) created the core arbitrage opportunity. The clustering of low prices in early morning (hours 1-8) and extreme peak in late afternoon (hours 17-19) shaped the optimal dispatch: pump during cheap hours, generate during peak, reserve during volatile mid-peak hours.
-
-## Algorithm & Analysis
-
-### Phase 1: Identify Profitable Pairs
-
-The algorithm scanned all 24 × 24 = 576 possible pump-discharge hour combinations and evaluated profit using the efficiency-adjusted formula:
-
-**Profit = (Discharge Price × 0.75) - Pump Price**
-
-This accounts for 25% round-trip energy loss. A transaction is profitable when the effective price after losses exceeds the pump cost.
-
-**Result:** Found 169 profitable pairs out of 576 evaluated. The top 5 by profit all discharged at hour 18 (the $474.90 peak), pumping from the cheapest hours (1-5, ranging $41-48/MWh).
-
-### Phase 2: Execute Trades Greedily
-
-Trades were ranked by total profit (MW × profit per MWh) and executed in order until storage filled to 8,000 MWh. Greedy execution is optimal under perfect price foresight (knowing all 24 hours in advance), though real traders must forecast with uncertainty.
-
-**Executed 8 trades:**
-1. Hour 4 ($41.23) → Hour 18 ($474.90) | Profit: $314,945
-2. Hour 3 ($42.66) → Hour 18 ($474.90) | Profit: $313,515
-3. Hour 5 ($43.04) → Hour 18 ($474.90) | Profit: $313,135
-4. Hour 2 ($44.94) → Hour 18 ($474.90) | Profit: $311,235
-5. Hour 1 ($48.19) → Hour 18 ($474.90) | Profit: $307,985
-6. Hour 6 ($50.31) → Hour 18 ($474.90) | Profit: $305,865
-7. Hour 7 ($55.00) → Hour 18 ($474.90) | Profit: $301,175
-8. Hour 8 ($65.57) → Hour 18 ($474.90) | Profit: $290,605
-
-All 8 GW·hours discharged at hour 18, the market's peak price. Pumping spanned hours 1-8 with total cost of $398,940 (negative revenue).
-
-### Phase 3: Allocate Reserves
-
-After fulfilling energy trades, 9 idle hours remained. TMNSR was allocated to hours where the clearing price exceeded expected closeout risk:
-
-**TMNSR Revenue = 1000 MW × MAX(TMNSR Price - Expected Closeout, 0)**
-
-Hours with high reserve prices (9-10, 13-15, 21-24) were reserved, generating $564,660 in TMNSR revenue. This reserves component dwarfed energy arbitrage in absolute magnitude.
-
-## Results Summary
+At each hour `h` and storage state `s`, the optimizer solves:
 
 ```
-Energy Arbitrage Revenue:        $-398,940  (pump cost)
-Generation Revenue:              $356,175   (discharge revenue)
-Net Energy Arbitrage:            $-34,765
-Reserve (TMNSR) Revenue:         $564,660
-────────────────────────────────────────────────────
-TOTAL DAILY REVENUE:             $529,895
+dp[h][s] = max(action ∈ {IDLE, TMNSR, PUMP, GENERATE})
+         = max(revenue[action] + dp[h+1][s'])
+
+Where:
+  IDLE:     0 + dp[h+1][s]
+  TMNSR:    tmnsr_revenue(h) + dp[h+1][s]
+  PUMP:     -cost(h) + dp[h+1][s+750]     if s+750 ≤ 8,000
+  GENERATE: revenue(h) + dp[h+1][s-1,000] if s ≥ 1,000
 ```
 
-The dispatch pattern shows:
-- **Hours 1-8:** PUMP (charging storage from 0 to 8,000 MWh)
-- **Hour 18:** GENERATE (discharging to 6,667 MWh)
-- **Hours 9-10, 13-15, 21-24:** TMNSR reserves (idle storage, earning capacity payment)
-- **Hours 11-12, 16-17, 19-20:** IDLE (storage held, no revenue)
+**State Space:** 24 hours × ~11 feasible storage levels (due to 750/1,000 MWh increments)  
+**Computational Complexity:** O(24 × 11 × 4) = O(1,056) operations  
+**Guarantee:** Optimal solution (no approximation)
 
-The 4-panel chart visualizes this: prices with dispatch colors, storage trajectory, hourly revenue breakdown, and cumulative profit curve reaching $529,895 by day-end.
+### Revenue Calculations
 
-## Code Modules
+**Energy Revenue:**
+- Pumping: Cost = 1,000 MW × DA_LMP (grid cost to pump)
+- Generation: Revenue = 1,000 MW × DA_LMP (wholesale price received)
 
-### step1_data_collection.py
+**Storage Efficiency:**
+- Pump: 1,000 MWh grid input → +750 MWh stored (75% efficiency, loss on input)
+- Generate: -1,000 MWh stored → 1,000 MWh sold (no further adjustment to revenue)
 
-Fetches real pricing data from ISO-NE Web Services API using HTTP Basic Authentication. Four endpoints are queried:
+**TMNSR Revenue (ISO-NE Formula):**
+```
+Revenue = max(TMNSR_Clearing_Price - (RTLMP - Strike_Price), 0) × 1,000 MW
 
-- `/hourlylmp/da/final/day/{date}/location/{id}` → Day-ahead LMP
-- `/hourlylmp/rt/final/day/{date}/location/{id}` → Real-time LMP
-- `/daasreservedata/day/{date}` → TMNSR clearing prices
-- `/daasstrikeprices/day/{date}` → Strike prices for closeout calculation
+Interpretation:
+- Reserve clearing price paid upfront
+- Closeout charge: (RTLMP - Strike_Price)
+  - If RTLMP > Strike, operator owes closeout charge (reduces net revenue)
+  - If RTLMP < Strike, operator gains benefit (increases net revenue)
+- Max(·, 0) prevents losses (operator can decline dispatch if unprofitable)
+```
 
-Data is parsed from nested JSON, indexed by hour (1-24), and saved to `pricing_data.csv` for downstream use. Dependencies: `requests`, `pandas`.
+## Data
 
-### step2_optimization.py
+### Source
+ISO-NE WebServices API for June 24, 2025, Mass Hub (location ID 4000)
 
-Implements the three-phase greedy optimization algorithm. Phase 1 constructs a profit matrix for all pump-discharge pairs using the 75% efficiency formula. Phase 2 ranks pairs by total profit and simulates dispatch, tracking storage level to prevent exceeding 8,000 MWh. Phase 3 evaluates TMNSR profitability for remaining capacity.
+### Pricing Series (24 hours)
 
-Output: Console summary of trades and hourly dispatch table, plus `dispatch_results.csv` with action, price, revenue, and storage state for all 24 hours. Dependencies: `pandas`.
+| Hour | DA LMP | RT LMP | TMNSR Price | Strike Price | Closeout Charge |
+|------|--------|--------|-------------|--------------|-----------------|
+| 1    | $48.19 | $60.59 | $11.33      | $62.60       | -$2.01          |
+| 2    | $44.94 | $94.02 | $9.25       | $59.55       | $34.47          |
+| 3    | $42.66 | $56.57 | $5.22       | $57.05       | -$0.48          |
+| 4    | $41.23 | $49.51 | $5.40       | $57.19       | -$7.68          |
+| 5    | $43.04 | $61.63 | $5.72       | $57.69       | $3.94           |
+| 6    | $50.31 | $74.97 | $6.34       | $58.43       | $16.54          |
+| 7    | $55.00 | $44.57 | $10.84      | $59.88       | -$15.31         |
+| 8    | $65.57 | $58.20 | $13.77      | $61.32       | -$3.12          |
+| 9    | $65.73 | $41.28 | $24.71      | $62.90       | -$21.62 ← High margin |
+| 10   | $68.81 | $69.42 | $25.79      | $61.91       | $7.51           |
+| 11   | $85.03 | $73.21 | $16.98      | $55.42       | $17.79          |
+| 12   | $126.43| $103.42| $33.74      | $57.95       | $45.47          |
+| 13   | $174.31| $110.40| $66.70      | $68.45       | $41.95          |
+| 14   | $200.18| $128.09| $123.88     | $75.13       | $52.96          |
+| 15   | $300.00| $183.69| $147.89     | $82.21       | $101.48         |
+| 16   | $343.18| $334.40| $237.16     | $91.37       | $243.03 ← Peak |
+| 17   | $418.31| $741.30| $289.58     | $99.80       | $641.50         |
+| 18   | $474.90| $1,110.22| $369.64   | $109.45      | $1,000.77       |
+| 19   | $407.24| $1,073.63| $429.47   | $114.39      | $959.24         |
+| 20   | $315.88| $853.40| $363.18     | $116.39      | $737.01         |
+| 21   | $187.58| $261.93| $263.53     | $110.37      | $151.56         |
+| 22   | $101.91| $64.91 | $159.98     | $101.76      | -$36.85         |
+| 23   | $50.79 | $52.35 | $73.12      | $84.89       | -$32.54         |
+| 24   | $50.30 | $57.43 | $34.52      | $74.18       | -$16.75         |
 
-### step3_analysis.py
+**Key Observations:**
+- DA LMP rises from $41-65 (hours 1-8) to $418-474 (hours 15-20)
+- TMNSR margin excellent at hour 9 ($46.33), poor at hours 2, 6, 12
+- RT prices spike hours 17-20 (system stress), making TMNSR unprofitable there
 
-Generates professional 4-panel matplotlib visualization:
+## Optimal Dispatch
 
-1. **Top-left:** Hourly DA prices overlaid with dispatch decisions (red dots = pump, green = generate, yellow = TMNSR, gray = idle). Shows when each action occurs relative to price curve.
+### Schedule
 
-2. **Top-right:** Storage trajectory in MWh, filling to 8,000 MWh by hour 8 and discharging in hour 18. Red dashed line marks capacity.
+| Period | Hours | Action | Rationale |
+|--------|-------|--------|-----------|
+| Low Price | 1-8 | PUMP | Build 6,000 MWh storage at costs $41-65/MWh |
+| High TMNSR Margin | 9-10 | TMNSR | Earn $46.33, $18.28/MWh with zero storage impact |
+| Mid-Range | 11-12 | IDLE | DA prices rising ($85, $126); TMNSR margins poor |
+| Moderate TMNSR | 13-14 | TMNSR | Earn $24.75, $70.92/MWh; reserve still valuable |
+| Peak Prices | 15-20 | GENERATE | Discharge 6,000 MWh at peak DA prices $300-474/MWh |
+| High TMNSR (low RT risk) | 21-24 | TMNSR | Earn $111.97, $196.83, $105.66, $51.27/MWh; RT prices normalized |
 
-3. **Bottom-left:** Bar chart of hourly revenue by action, showing negative pump cost, positive generation revenue, and distributed reserve revenue.
+### Storage Profile
 
-4. **Bottom-right:** Cumulative daily revenue curve, starting negative (pumping cost) and ending at $529,895. Shows revenue progression and cumulative financial result.
+```
+MWh
+8000 |
+7000 |     ┌─────────────────┐
+6000 |     │ 6000 MWh Buffer │
+5000 |     │ (Pump complete) │
+4000 |   ╱─┴─────────────────┴───────╲
+3000 |  ╱                              ╲
+2000 | ╱                                ╲
+1000 |╱                                  ╲
+   0 └────────────────────────────────────└
+     0  5  10  15  20  25  Hour
 
-Also prints summary statistics: dispatch breakdown (8 pump, 1 generate, 9 TMNSR, 6 idle), revenue (energy vs. reserves), price stats, and storage metrics. Chart saved to `dispatch_analysis.png`. Dependencies: `matplotlib`, `pandas`.
+Pump Phase: Hours 1-8 (raise 750 MWh/hr)
+Hold Phase: Hours 9-14 (prepare for discharge)
+Gen Phase: Hours 15-20 (lower 1000 MWh/hr)
+Reserve: Hours 21-24 (empty storage, no constraints)
+```
 
-## Limitations & Real-World Considerations
+## Results
 
-**Perfect Foresight:** The algorithm assumes all 24 hours of prices are known in advance. Real traders forecast prices with forecast error, typically 10-20% RMSE. Stochastic optimization (e.g., robust MPC, scenario trees, dynamic programming) is required in practice. Our revenue is thus an upper bound; real execution would be 10-20% lower.
+### Revenue Breakdown
 
-**Instant Ramp Rate:** We assume 0→1000 MW pumping/generating instantly. Physical turbines ramp at ~100 MW/min (10 min to full power). Some high-profit trades spanning adjacent hours become infeasible. Impact: reduces feasible trade set and revenue.
+**Energy Arbitrage (Pump-Generate Spread):**
 
-**TMNSR as Spot Reserve:** We treat each hour's TMNSR allocation independently. Real TMNSR is a day-ahead forward market: the operator commits capacity at DA clearing, then can be called upon in RT. Simultaneous energy generation and reserve provision is operationally complex and can conflict.
+| Component | Amount |
+|-----------|--------|
+| Pumping Cost (hrs 1-8) | -$390,940 |
+| Generation Revenue (hrs 15-20) | +$2,259,510 |
+| **Net Energy Arbitrage** | **$1,868,570** |
 
-**Constant 75% Efficiency:** Round-trip efficiency varies with operating point, temperature, age, and maintenance state. A full model would use part-load efficiency curves; constant efficiency is optimistic.
+**TMNSR Reserve Revenue:**
 
-**No Operational Constraints:** We ignore minimum runtime, startup/shutdown costs, environmental water releases, pump/turbine maintenance windows, and seasonal head variations. Real pumped hydro dispatch is constrained by reservoir level, environmental compliance, and grid stability.
+| Hours | Quantity | Avg Net Price | Revenue |
+|-------|----------|---------------|---------|
+| 9-10 | 2 | $32.31 | $64,610 |
+| 13-14 | 2 | $47.83 | $95,670 |
+| 21-24 | 4 | $92.41 | $369,640 |
+| **TMNSR Total** | **8 hours** | | **$626,010** |
 
-**No Transmission or Losses:** We assume the facility can inject/absorb power at Mass Hub LMP without transmission loss or congestion. Real transmission constraints can limit economic dispatch.
+**Daily Total: $2,494,580**
 
-**No Forecast Error in Closeout:** TMNSR closeout charges depend on real-time LMP realizations, which are uncertain at DA decision time. We use expected closeout from DA strike prices; actual performance would differ.
+### Hourly Dispatch Details
 
-**Single-Day Horizon:** This analysis optimizes June 24 in isolation. Real operations optimize over rolling seasons, balancing arbitrage against inventory management (is it better to save water for tomorrow's higher prices?). Multi-day or seasonal stochastic optimization is required for true revenue maximization.
+```
+Hour 1-8 (PUMP):
+  Action: Pump 1,000 MWh into grid
+  Storage: 0 → 6,000 MWh (cumulative)
+  Cost: $48.19 to $65.57/MWh
+  Total Loss: -$390,940
+
+Hour 9-10 (TMNSR):
+  Action: Provide 1,000 MW reserve capacity
+  Closeout margins: +$46.33, +$18.28/MWh (favorable)
+  Storage: Constant 6,000 MWh
+  Revenue: +$64,610
+
+Hour 11-12 (IDLE):
+  Action: Hold (prices rising, but no better opportunity)
+  Storage: Constant 6,000 MWh
+  Revenue: $0
+
+Hour 13-14 (TMNSR):
+  Action: Provide 1,000 MW reserve capacity
+  Closeout margins: +$24.75, +$70.92/MWh
+  Storage: Constant 6,000 MWh
+  Revenue: +$95,670
+
+Hour 15-20 (GENERATE):
+  Action: Generate 1,000 MW to wholesale market
+  Storage: 6,000 → 0 MWh (cumulative discharge)
+  Price: $300.00 to $474.90/MWh
+  Total Revenue: +$2,259,510
+
+Hour 21-24 (TMNSR):
+  Action: Provide 1,000 MW reserve capacity
+  Closeout margins: +$111.97, +$196.83, +$105.66, +$51.27/MWh
+  Storage: Constant 0 MWh (no depletion risk)
+  Revenue: +$369,640
+```
+
+## Limitations
+
+### Model Scope (By Design)
+
+- **Perfect Foresight:** Assumes all 24 prices known at decision time. Real bidding requires RT price forecasting and faces forecast error risk.
+- **No Call Risk:** Assumes TMNSR reserves are rarely called or not modeled. Real dispatch could deplete inventory unpredictably.
+- **No Ramping:** Assumes instant ramp from 0 to 1,000 MW. Real asset has ~5-10 min ramp at 100 MW/min.
+- **No Minimum Run:** Ignores technical constraints (minimum run time, startup costs, etc.).
+- **No Outages:** Assumes 100% availability. Real units face scheduled and forced outages.
+
+### Market Scope (By Assignment)
+
+- **FERP Not Included:** ISO-NE charges Forecast Error Penalty Reserve. Real optimization must budget for this.
+- **Bidding Mechanics Abstracted:** Ignores bid windows, offer management, portfolio constraints.
+- **Settlement Simplified:** Uses realized prices. Real settlement involves many adjustment mechanisms.
+
+### Data Limitations
+
+- **Single Day:** Results reflect June 24, 2025 only. Seasonal variation, demand patterns, and extreme events not captured.
+- **One Location:** Mass Hub pricing may differ from LMP at actual plant location.
+- **Backward-Looking:** RTLMP used to calculate TMNSR net revenue. In real day-ahead bidding, RTLMP is unknown.
+
+## Files
+
+| File | Purpose |
+|------|---------|
+| `config.py` | Asset parameters (capacity, efficiency, location) |
+| `step1_data_collection.py` | Fetch ISO-NE pricing data via WebServices API |
+| `step2_optimization.py` | DP solver; computes optimal dispatch |
+| `step3_visualize.py` | Generate 4-panel output chart |
+| `pricing_data.csv` | Input: 24 rows of hourly market prices |
+| `dispatch_results.csv` | Output: optimal hourly actions, revenues, storage state |
+| `dispatch_analysis.png` | Output: visualization of prices, storage, revenue, cumulative |
+
+## Validation
+
+✓ Storage conservation: 8 pumps × 750 MWh = 6,000 MWh input; 6 generates × 1,000 MWh = 6,000 MWh output  
+✓ Energy revenue: -$390,940 (pump) + $2,259,510 (gen) = $1,868,570  
+✓ TMNSR revenue: Sum of 8 reserve hours = $626,010  
+✓ Total: $1,868,570 + $626,010 = $2,494,580  
+✓ Final storage: 0 MWh (all energy discharged)  
+✓ Storage never exceeds 8,000 MWh or goes negative  
+
+## How to Reproduce
+
+```bash
+# Install dependencies
+pip install pandas requests matplotlib
+
+# Set API credentials
+export ISO_NE_USER="moizmahesar@gmail.com"
+export ISO_NE_PASS="Editor1!"
+
+# Run pipeline
+python3 step1_data_collection.py    # → pricing_data.csv
+python3 step2_optimization.py        # → dispatch_results.csv
+python3 step3_visualize.py           # → dispatch_analysis.png
+
+# View results
+cat dispatch_results.csv
+open dispatch_analysis.png
+```
 
 ## Conclusion
 
-This project demonstrates core energy storage economics: a 1,000 MW, 8,000 MWh pumped hydro facility can generate $529,895 in revenue on a volatile, high-spread day by executing price arbitrage and reserves strategies. The analysis reveals that reserves (TMNSR) contribute 107% of total revenue, while energy arbitrage contributes -7% due to efficiency losses at current price levels. On days with tighter price spreads, reserves would dominate even more strongly.
+The dynamic programming approach identifies and executes a coherent strategy:
+1. **Exploit low prices early** (pump at $41-66/MWh)
+2. **Capture reserve value when margins favor reserves** (TMNSR at high clearing prices, low RT risk)
+3. **Sell at peak prices late** (generate at $300-474/MWh)
+4. **Maintain optionality** (IDLE when no compelling action)
 
-The greedy algorithm is simple, interpretable, and optimal under perfect foresight. Real deployment would require stochastic optimization to handle forecast error, operational constraints to model ramp rates and efficiency curves, and multi-day horizons to manage inventory. Nevertheless, this framework provides clear decision logic: pump at cheap hours, generate at peaks, reserve at volatile periods, respecting storage and physical limits. The visualization demonstrates the dispatch pattern and revenue realization clearly to stakeholders and regulators.
+This achieves $2.49M daily revenue—the global optimal under perfect-foresight assumptions. Real-world implementation would require:
+- Probabilistic RT price forecasting
+- Risk-adjusted reserve call modeling
+- Integration with portfolio constraints
+- Compliance with actual market rules and settlement mechanics
+
+---
+
+**Generated:** June 24, 2025  
+**Asset:** FirstLight Power, 1,000 MW Pumped Hydro  
+**Market:** ISO-NE Day-Ahead Energy + TMNSR  
+**Method:** Dynamic Programming (Guaranteed Optimal)

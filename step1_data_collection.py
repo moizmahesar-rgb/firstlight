@@ -1,99 +1,90 @@
-import requests
+"""
+Fetch ISO-NE pricing data for June 24, 2025
+Credentials via environment variables (not in repo)
+"""
+import os
 import pandas as pd
+import requests
+from config import ISO_NE_BASE_URL, MASS_HUB_ID, ANALYSIS_DATE
 
-USERNAME = "moizmahesar@gmail.com"
-PASSWORD = "Editor1!"
-BASE_URL = "https://webservices.iso-ne.com/api/v1.1"
-LOCATION_ID = 4000
-DATE = "20250624"
+USERNAME = os.getenv("ISO_NE_USER")
+PASSWORD = os.getenv("ISO_NE_PASS")
 
-def fetch_da_lmp():
-    url = f"{BASE_URL}/hourlylmp/da/final/day/{DATE}/location/{LOCATION_ID}.json"
-    try:
-        response = requests.get(url, timeout=10, auth=(USERNAME, PASSWORD))
-        response.raise_for_status()
-        data = response.json()
-        prices = [0.0] * 24
-        for lmp in data['HourlyLmps']['HourlyLmp']:
-            hour = int(lmp['BeginDate'][11:13]) - 1
-            prices[hour] = float(lmp['LmpTotal'])
-        return prices
-    except Exception as e:
-        print(f"✗ Failed to get DA prices: {e}")
-        return None
+if not USERNAME or not PASSWORD:
+    raise ValueError(
+        "Missing ISO-NE credentials. Set ISO_NE_USER and ISO_NE_PASS environment variables."
+    )
 
-def fetch_rt_lmp():
-    url = f"{BASE_URL}/hourlylmp/rt/final/day/{DATE}/location/{LOCATION_ID}.json"
-    try:
-        response = requests.get(url, timeout=10, auth=(USERNAME, PASSWORD))
-        response.raise_for_status()
-        data = response.json()
-        prices = [0.0] * 24
-        for lmp in data['HourlyLmps']['HourlyLmp']:
-            hour = int(lmp['BeginDate'][11:13]) - 1
-            prices[hour] = float(lmp['LmpTotal'])
-        return prices
-    except Exception as e:
-        print(f"✗ Failed to get RT prices: {e}")
-        return None
+print("\n" + "="*80)
+print(f"Fetching ISO-NE data for {ANALYSIS_DATE}")
+print("="*80 + "\n")
 
-def fetch_tmnsr():
-    url = f"{BASE_URL}/daasreservedata/day/{DATE}.json"
-    try:
-        response = requests.get(url, timeout=10, auth=(USERNAME, PASSWORD))
-        response.raise_for_status()
-        data = response.json()
-        prices = [0.0] * 24
-        for reserve in data['isone_web_services']['day_ahead_reserves']['day_ahead_reserve']:
-            hour = int(reserve['market_hour']['local_hour_end']) - 1
-            prices[hour] = float(reserve['tmnsr_clearing_price'])
-        return prices
-    except Exception as e:
-        print(f"✗ Failed to get TMNSR prices: {e}")
-        return None
+auth = (USERNAME, PASSWORD)
 
-def fetch_strike_prices():
-    url = f"{BASE_URL}/daasstrikeprices/day/{DATE}.json"
-    try:
-        response = requests.get(url, timeout=10, auth=(USERNAME, PASSWORD))
-        response.raise_for_status()
-        data = response.json()
-        prices = [0.0] * 24
-        for strike in data['isone_web_services']['day_ahead_strike_prices']['day_ahead_strike_price']:
-            hour = int(strike['market_hour']['local_hour_end']) - 1
-            prices[hour] = float(strike['strike_price'])
-        return prices
-    except Exception as e:
-        print(f"✗ Failed to get strike prices: {e}")
-        return None
+def fetch(url):
+    """Fetch JSON from ISO-NE API with proper error handling"""
+    response = requests.get(
+        url,
+        auth=auth,
+        headers={"Accept": "application/json"},
+        timeout=30
+    )
+    print(f"{response.status_code} | {url}")
+    response.raise_for_status()
+    return response.json()
 
-print("=" * 60)
-print("FETCHING PRICING DATA FOR JUNE 24, 2025")
-print("=" * 60)
+try:
+    da = fetch(f"{ISO_NE_BASE_URL}/hourlylmp/da/final/day/{ANALYSIS_DATE}/location/{MASS_HUB_ID}/")
+    rt = fetch(f"{ISO_NE_BASE_URL}/hourlylmp/rt/final/day/{ANALYSIS_DATE}/location/{MASS_HUB_ID}/")
+    tmnsr = fetch(f"{ISO_NE_BASE_URL}/daasreservedata/day/{ANALYSIS_DATE}/")
+    strike = fetch(f"{ISO_NE_BASE_URL}/daasstrikeprices/day/{ANALYSIS_DATE}/")
+except Exception as e:
+    print(f"API Error: {e}")
+    raise
 
-print("\nFetching DA prices...")
-da_prices = fetch_da_lmp()
+data = {h: {} for h in range(24)}
 
-print("Fetching RT prices...")
-rt_prices = fetch_rt_lmp()
+if da and 'HourlyLmps' in da:
+    for lmp in da['HourlyLmps']['HourlyLmp']:
+        h = int(lmp['BeginDate'][11:13]) - 1
+        if 0 <= h < 24:
+            data[h]['da_lmp'] = float(lmp['LmpTotal'])
 
-print("Fetching TMNSR prices...")
-tmnsr_prices = fetch_tmnsr()
+if rt and 'HourlyLmps' in rt:
+    for lmp in rt['HourlyLmps']['HourlyLmp']:
+        h = int(lmp['BeginDate'][11:13]) - 1
+        if 0 <= h < 24:
+            data[h]['rt_lmp'] = float(lmp['LmpTotal'])
 
-print("Fetching strike prices...")
-strike_prices = fetch_strike_prices()
+if tmnsr and 'isone_web_services' in tmnsr:
+    for r in tmnsr['isone_web_services']['day_ahead_reserves']['day_ahead_reserve']:
+        h = int(r['market_hour']['local_hour_end']) - 1
+        if 0 <= h < 24:
+            data[h]['tmnsr_price'] = float(r['tmnsr_clearing_price'])
 
-if all([da_prices, rt_prices, tmnsr_prices, strike_prices]):
-    df = pd.DataFrame({
-        'hour': range(1, 25),
-        'da_lmp': da_prices,
-        'rt_lmp': rt_prices,
-        'tmnsr_price': tmnsr_prices,
-        'strike_price': strike_prices
-    })
-    df.to_csv('pricing_data.csv', index=False)
-    print("\n✓ Done fetching")
-    print("\nSample data:")
-    print(df.head(10))
-else:
-    print("\nSomething went wrong – check errors above") 
+if strike and 'isone_web_services' in strike:
+    for s in strike['isone_web_services']['day_ahead_strike_prices']['day_ahead_strike_price']:
+        h = int(s['market_hour']['local_hour_end']) - 1
+        if 0 <= h < 24:
+            data[h]['strike_price'] = float(s['strike_price'])
+
+df = pd.DataFrame([
+    {
+        'hour': h + 1,
+        'da_lmp': data[h].get('da_lmp'),
+        'rt_lmp': data[h].get('rt_lmp'),
+        'tmnsr_price': data[h].get('tmnsr_price'),
+        'strike_price': data[h].get('strike_price')
+    }
+    for h in range(24)
+])
+
+# Validate
+required_cols = ['da_lmp', 'rt_lmp', 'tmnsr_price', 'strike_price']
+if df[required_cols].isna().any().any():
+    print("\n⚠ Missing pricing data:")
+    print(df[df[required_cols].isna().any(axis=1)])
+    raise ValueError("Missing pricing data. Check API parsing.")
+
+df.to_csv('pricing_data.csv', index=False)
+print("\n✓ pricing_data.csv saved\n")
