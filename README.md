@@ -282,7 +282,7 @@ This achieves $2.49M daily revenue—the global optimal under perfect-foresight 
 
 ---
 
-**Generated:** June 24, 2025  
+**Analysis Date:** June 24, 2025  
 **Asset:** FirstLight Power, 1,000 MW Pumped Hydro  
 **Market:** ISO-NE Day-Ahead Energy + TMNSR  
 **Method:** Dynamic Programming (Optimal Under Stated Conditions in Assignment)
