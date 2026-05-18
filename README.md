@@ -6,6 +6,16 @@ This project optimizes revenue for a 1,000 MW pumped hydro storage facility oper
 
 The algorithm evaluates all possible pump-discharge pairs across 24 hours, identifies profitable trades after accounting for efficiency losses, executes them greedily in order of profit, and allocates remaining capacity to TMNSR reserves when profitable. Results demonstrate that reserves (TMNSR) generate 168% more revenue than energy arbitrage alone, revealing the dominant revenue driver in congested, volatile markets.
 
+## Results Visualization
+
+![Dispatch Analysis](dispatch_analysis.png)
+
+The 4-panel chart above shows:
+- **Top-left:** Hourly prices with dispatch decisions (red=pump, green=generate, yellow=TMNSR)
+- **Top-right:** Storage level trajectory, filling to 8,000 MWh by hour 8
+- **Bottom-left:** Hourly revenue breakdown by action type
+- **Bottom-right:** Cumulative profit curve reaching $529,895 by end of day
+
 ## Data Source
 
 Data was fetched directly from ISO New England's public RESTful API (v1.1) for location 4000 (Mass Hub) on June 24, 2025. Four price series were collected:
