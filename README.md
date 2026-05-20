@@ -179,9 +179,9 @@ The optimized schedule follows this general pattern:
 
 | Period | Hours | Revenue |
 |---|---:|---:|
-| Early reserve period | 9-10 | $64,610 |
+| Early reserve period | 9-10 | $42,990 |
 | Midday reserve period | 13-14 | $95,670 |
-| Late reserve period | 21-24 | $357,970 |
+| Late reserve period | 21-24 | $379,590 |
 | **Total TMNSR** | **8 hours** | **$518,250** |
 
 ### Total
