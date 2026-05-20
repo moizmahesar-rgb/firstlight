@@ -6,9 +6,9 @@
 
 This project optimizes daily revenue for a 1,000 MW pumped hydro asset operating in ISO-NE day-ahead energy and TMNSR (Ten-Minute Non-Spinning Reserve) markets. Using dynamic programming, the model determines optimal hourly dispatch decisions to maximize combined energy arbitrage and reserve revenue.
 
-**Optimal Daily Revenue: $2,494,580**
-- Energy Arbitrage: $1,868,570 (75%)
-- TMNSR Reserves: $626,010 (25%)
+**Optimal Daily Revenue: $2,386,820**
+- Energy Arbitrage: $1,868,570 (78%)
+- TMNSR Reserves: $518,250 (22%)
 
 ## Problem Statement
 
@@ -160,9 +160,9 @@ Reserve: Hours 21-24 (empty storage, no constraints)
 | 9-10 | 2 | $32.31 | $64,610 |
 | 13-14 | 2 | $47.83 | $95,670 |
 | 21-24 | 4 | $92.41 | $369,640 |
-| **TMNSR Total** | **8 hours** | | **$626,010** |
+| **TMNSR Total** | **8 hours** | | **$518,250** |
 
-**Daily Total: $2,494,580**
+**Daily Total: $2,386,820**
 
 ### Hourly Dispatch Details
 
@@ -241,8 +241,8 @@ Hour 21-24 (TMNSR):
 
 ✓ Storage conservation: 8 pumps × 750 MWh = 6,000 MWh input; 6 generates × 1,000 MWh = 6,000 MWh output  
 ✓ Energy revenue: -$390,940 (pump) + $2,259,510 (gen) = $1,868,570  
-✓ TMNSR revenue: Sum of 8 reserve hours = $626,010  
-✓ Total: $1,868,570 + $626,010 = $2,494,580  
+✓ TMNSR revenue: Sum of 8 reserve hours = $518,250  
+✓ Total: $1,868,570 + $518,250 = $2,386,820  
 ✓ Final storage: 0 MWh (all energy discharged)  
 ✓ Storage never exceeds 8,000 MWh or goes negative  
 
